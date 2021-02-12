@@ -11,5 +11,6 @@ cd nelsoninteriorpaintcompany.com
 ```
 4.
 ```
+docker run -p 8000:8000 -v ${PWD}:/app mber5/nipc-dev yarn install
 docker run -p 8000:8000 -v ${PWD}:/app mber5/nipc-dev
 ```
