@@ -2,8 +2,8 @@
 ## Gatsbyjs website with tinaCMS on gh-pages
 
 ### Development
-1. Install ![git](https://git-scm.com/downloads)
-2. Install ![docker](https://docs.docker.com/get-docker/)
+1. Install ![https://git-scm.com/downloads](git)
+2. Install ![https://docs.docker.com/get-docker](docker)
 3.
 ```
 git clone https://github.com/m-bers/nelsoninteriorpaintcompany.com.git
