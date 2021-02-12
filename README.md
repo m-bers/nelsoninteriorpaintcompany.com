@@ -8,8 +8,8 @@
 ```
 git clone https://github.com/m-bers/nelsoninteriorpaintcompany.com.git
 cd nelsoninteriorpaintcompany.com
-4.
 ```
+4.
 ```
 docker run -p 8000:8000 -v ${PWD}:/app mber5/nipc-dev
 ```
