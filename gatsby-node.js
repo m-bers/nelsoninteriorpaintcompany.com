@@ -1,115 +1,200 @@
 const path = require(`path`)
-const { createFilePath } = require(`gatsby-source-filesystem`)
+const { GraphQLBoolean } = require("gatsby/graphql")
 
-exports.createPages = async ({ graphql, actions, reporter }) => {
+exports.setFieldsOnGraphQLNodeType = ({ type }) => {
+  // if the node is a markdown file, add the `published` field
+  if ("MarkdownRemark" === type.name) {
+    return {
+      published: {
+        type: GraphQLBoolean,
+        resolve: ({ frontmatter }) => {
+          /*
+          `published` is always true in development
+              so both drafts and finished posts are built
+          */
+          if (process.env.NODE_ENV !== "production") {
+            return true
+          }
+          /*
+          return the opposite of the `draft` value,
+          i.e. if draft = true : published = false
+          */
+          return !frontmatter.draft
+        },
+      },
+    }
+  }
+  return {}
+}
+
+exports.onCreateNode = ({
+  node,
+  actions,
+  createNodeId,
+  createContentDigest,
+}) => {
+  const { createNode, createNodeField, createParentChildLink } = actions
+
+  // Check for the correct type to only affect this
+  if (node.internal.type === `PagesJson`) {
+    // transform markdown in blocks[i].content
+    if (node.blocks) {
+      const markdownHost = {
+        id: createNodeId(`${node.id} markdown host`),
+        parent: node.id,
+        internal: {
+          contentDigest: createContentDigest(JSON.stringify(node.blocks)),
+          type: `${node.internal.type}MarkdownData`,
+        },
+      }
+
+      createNode(markdownHost)
+
+      createNodeField({
+        node,
+        name: `markdownContent___NODE`, // Before the ___NODE: Name of the new fields
+        value: markdownHost.id, // Connects both nodes
+      })
+
+      node.blocks.forEach((block, i) => {
+        if (!block.content) {
+          block.content = ""
+        }
+        const blockNode = {
+          id: `${node.id} block ${i} markdown`,
+          parent: markdownHost.id,
+          internal: {
+            content: block.content,
+            contentDigest: createContentDigest(block.content),
+            type: `${node.internal.type}BlockMarkdown`,
+            mediaType: "text/markdown",
+          },
+        }
+
+        createNode(blockNode)
+
+        createParentChildLink({ parent: node, child: blockNode })
+      })
+    }
+
+    // transform markdown in node.content
+    if (node.content) {
+      const textNode = {
+        id: createNodeId(`${node.id} markdown field`),
+        children: [],
+        parent: node.id,
+        internal: {
+          content: node.content,
+          mediaType: `text/markdown`, // Important!
+          contentDigest: createContentDigest(node.content),
+          type: `${node.internal.type}Markdown`,
+        },
+      }
+
+      createNode(textNode)
+
+      // Add link to the new node
+      createNodeField({
+        node,
+        name: `markdownContent___NODE`, // Before the ___NODE: Name of the new fields
+        value: textNode.id, // Connects both nodes
+      })
+    }
+  }
+}
+
+exports.createPages = async ({ actions, graphql, reporter }) => {
   const { createPage } = actions
 
-  // Define a template for blog post
-  const blogPost = path.resolve(`./src/templates/blog-post.js`)
-
-  // Get all markdown blog posts sorted by date
-  const result = await graphql(
-    `
-      {
-        allMarkdownRemark(
-          sort: { fields: [frontmatter___date], order: ASC }
-          limit: 1000
-        ) {
-          nodes {
-            id
-            fields {
-              slug
+  const result = await graphql(`
+    {
+      pages: allPagesJson(
+        filter: { path: { ne: null }, listType: { eq: null } }
+      ) {
+        edges {
+          node {
+            path
+          }
+        }
+      }
+      lists: allPagesJson(
+        filter: { path: { ne: null }, listType: { ne: null } }
+      ) {
+        edges {
+          node {
+            path
+            listType
+          }
+        }
+      }
+      posts: allMarkdownRemark(
+        filter: { frontmatter: { path: { ne: null } } }
+      ) {
+        edges {
+          node {
+            published
+            frontmatter {
+              path
+              type
             }
           }
         }
       }
-    `
-  )
+    }
+  `)
 
   if (result.errors) {
-    reporter.panicOnBuild(
-      `There was an error loading your blog posts`,
-      result.errors
-    )
+    reporter.panicOnBuild(`Error while running GraphQL query.`)
     return
   }
 
-  const posts = result.data.allMarkdownRemark.nodes
+  result.data.pages.edges.forEach(({ node }) => {
+    createPage({
+      path: node.path,
+      component: path.resolve(`src/templates/page.js`),
+      context: {},
+    })
+  })
 
-  // Create blog posts pages
-  // But only if there's at least one markdown file found at "content/blog" (defined in gatsby-config.js)
-  // `context` is available in the template as a prop and as a variable in GraphQL
+  result.data.posts.edges.forEach(({ node }) => {
+    if (!node.published) return
 
-  if (posts.length > 0) {
-    posts.forEach((post, index) => {
-      const previousPostId = index === 0 ? null : posts[index - 1].id
-      const nextPostId = index === posts.length - 1 ? null : posts[index + 1].id
+    createPage({
+      path: node.frontmatter.path,
+      component: path.resolve(`src/templates/post.js`),
+      context: {},
+    })
+  })
+
+  result.data.lists.edges.forEach(({ node }) => {
+    const listPageTemplate = path.resolve(`src/templates/list.js`)
+    const listType = node.listType
+    const allPosts = result.data.posts.edges
+    const posts = allPosts.filter(
+      (post) => post.node.frontmatter.type === listType
+    )
+    const postsPerPage = 5
+    const numPages = Math.max(Math.ceil(posts.length / postsPerPage), 1)
+    const slug = node.path
+
+    Array.from({ length: numPages }).forEach((_, i) => {
+      const currentPage = i + 1
+      const isFirstPage = i === 0
 
       createPage({
-        path: post.fields.slug,
-        component: blogPost,
+        path: isFirstPage
+          ? node.path
+          : `${String(node.path)}/${String(currentPage)}`,
+        component: listPageTemplate,
         context: {
-          id: post.id,
-          previousPostId,
-          nextPostId,
+          listType: listType,
+          slug: slug,
+          limit: postsPerPage,
+          skip: i * postsPerPage,
+          numPages: numPages,
+          currentPage: currentPage,
         },
       })
     })
-  }
-}
-
-exports.onCreateNode = ({ node, actions, getNode }) => {
-  const { createNodeField } = actions
-
-  if (node.internal.type === `MarkdownRemark`) {
-    const value = createFilePath({ node, getNode })
-
-    createNodeField({
-      name: `slug`,
-      node,
-      value,
-    })
-  }
-}
-
-exports.createSchemaCustomization = ({ actions }) => {
-  const { createTypes } = actions
-
-  // Explicitly define the siteMetadata {} object
-  // This way those will always be defined even if removed from gatsby-config.js
-
-  // Also explicitly define the Markdown frontmatter
-  // This way the "MarkdownRemark" queries will return `null` even when no
-  // blog posts are stored inside "content/blog" instead of returning an error
-  createTypes(`
-    type SiteSiteMetadata {
-      author: Author
-      siteUrl: String
-      social: Social
-    }
-
-    type Author {
-      name: String
-      summary: String
-    }
-
-    type Social {
-      twitter: String
-    }
-
-    type MarkdownRemark implements Node {
-      frontmatter: Frontmatter
-      fields: Fields
-    }
-
-    type Frontmatter {
-      title: String
-      description: String
-      date: Date @dateformat
-    }
-
-    type Fields {
-      slug: String
-    }
-  `)
+  })
 }

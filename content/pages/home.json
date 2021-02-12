@@ -1,0 +1,31 @@
+{
+  "path": "/",
+  "blocks": [
+    {
+      "_template": "ContentBlock",
+      "content": ""
+    }
+  ],
+  "hero": {
+    "headline": "Hi, I'm Ben",
+    "textline": "I'm a painter based in the Pacific Northwest and I can give your home the makeover of your dreams",
+    "ctas": [
+      {
+        "label": "Get a quote",
+        "link": "/contact",
+        "primary": true,
+        "arrow": true
+      },
+      {
+        "label": "See my work",
+        "link": "/blog",
+        "arrow": false,
+        "primary": false
+      }
+    ],
+    "image": "../images/",
+    "large": true
+  },
+  "displayTitle": false,
+  "title": "Home"
+}

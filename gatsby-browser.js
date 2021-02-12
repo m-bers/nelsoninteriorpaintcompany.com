@@ -1,10 +1,8 @@
-// custom typefaces
-import "typeface-montserrat"
-import "typeface-merriweather"
-// normalize CSS across browsers
-import "./src/normalize.css"
-// custom CSS styles
-import "./src/style.css"
+import { AuthorsField } from "./src/fields/authors"
 
-// Highlighting for code blocks
-import "prismjs/themes/prism.css"
+export const onClientEntry = () => {
+  window.tinacms.fields.add({
+    name: "authors",
+    Component: AuthorsField,
+  })
+}
